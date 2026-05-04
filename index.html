@@ -144,10 +144,6 @@ body{font-family:"HarmonyOS Sans SC" !important}
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen p-8">
-    <!-- Loading Progress Bar -->
-    <div id="loading-progress-container" class="fixed top-0 left-0 w-full h-1 z-50 bg-transparent pointer-events-none">
-        <div id="loading-progress-bar" class="h-full bg-blue-500 transition-all duration-300 ease-out w-0"></div>
-    </div>
     <div class="max-w-7xl mx-auto space-y-6">
         
         <!-- Header -->
@@ -982,16 +978,6 @@ body{font-family:"HarmonyOS Sans SC" !important}
             // Show loading
             document.querySelectorAll('[id^="kpi_"]').forEach(el => el.innerText = '加载中...');
 
-            // Initialize Progress Bar
-            const progressBar = document.getElementById('loading-progress-bar');
-            if (progressBar) {
-                progressBar.style.width = '0%';
-                progressBar.classList.remove('bg-red-500');
-                progressBar.classList.add('bg-blue-500');
-                progressBar.parentElement.classList.remove('opacity-0');
-                progressBar.parentElement.classList.remove('hidden');
-            }
-
             const { startTime, endTime } = calculateTimeRange();
 
             // Fetch all metrics
@@ -1004,35 +990,6 @@ body{font-family:"HarmonyOS Sans SC" !important}
             ];
 
             const results = {};
-            
-            // Progress Bar Logic
-            let totalTasks = 3 + allMetrics.length * 2;
-            let completedTasks = 0;
-            let hasError = false;
-
-            const updateProgress = (success = true) => {
-                completedTasks++;
-                if (!success) hasError = true;
-                
-                const percentage = Math.min((completedTasks / totalTasks) * 100, 100);
-                if (progressBar) {
-                    progressBar.style.width = `${percentage}%`;
-                    if (hasError) {
-                        progressBar.classList.remove('bg-blue-500');
-                        progressBar.classList.add('bg-red-500');
-                    }
-                    
-                    if (completedTasks >= totalTasks) {
-                        setTimeout(() => {
-                             progressBar.style.width = '100%'; // Ensure full width
-                             setTimeout(() => {
-                                 progressBar.style.width = '0%';
-                                 // progressBar.parentElement.classList.add('hidden'); 
-                             }, 500);
-                        }, 200);
-                    }
-                }
-            };
             
             // Parallel fetch
             const { prevStartTime, prevEndTime } = calculatePreviousRange(startTime, endTime);
@@ -1075,13 +1032,9 @@ body{font-family:"HarmonyOS Sans SC" !important}
                         if (section && updateMap[section]) {
                             updateMap[section](results);
                         }
-                        updateProgress(true);
-                    } else {
-                        updateProgress(false);
                     }
                 }).catch(e => {
                     console.error(`Error loading metric ${metric}:`, e);
-                    updateProgress(false);
                 });
 
                 // 2. Fetch Previous Data (Parallel)
@@ -1092,16 +1045,9 @@ body{font-family:"HarmonyOS Sans SC" !important}
                         if (results[metric] && section && updateMap[section]) {
                             updateMap[section](results);
                         }
-                        updateProgress(true);
-                    } else {
-                        // Previous data failure isn't critical, but we track it for progress
-                        // We might not want to turn red for missing previous data? 
-                        // User said "any API request fails", so let's stick to that.
-                        updateProgress(false);
                     }
                 }).catch(e => {
                     console.error(`Error loading prev metric ${metric}:`, e);
-                    updateProgress(false);
                 });
             });
         }
