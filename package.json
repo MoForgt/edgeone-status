@@ -1,0 +1,11 @@
+{
+  "name": "edgeone-monitor",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "tencentcloud-sdk-nodejs-common": "^4.1.122",
+    "tencentcloud-sdk-nodejs-teo": "^4.1.154"
+  }
+}

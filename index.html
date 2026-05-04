@@ -1,0 +1,2575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" href="https://q2.qlogo.cn/headimg_dl?dst_uin=2726730791&spec=0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新锐博客 的 EdgeOne 监控大屏</title>
+    <!-- Tailwind CSS for Shadcn/UI style -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@4.9.0/map/js/world.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Card hover effect - subtle */
+        .card-hover {
+            transition: all 0.2s ease;
+        }
+        .card-hover:hover {
+            box-shadow: 0 4px 20px -4px rgba(0,0,0,0.08);
+        }
+        
+        /* Section title styling */
+        .section-title {
+            position: relative;
+            padding-left: 1rem;
+        }
+        .section-title::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 1.25rem;
+            background: #3b82f6;
+            border-radius: 2px;
+        }
+    </style>
+    <script>
+        // Fetch config immediately
+        async function fetchConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                if (config.siteName) {
+                    document.title = config.siteName;
+                    const headerEl = document.getElementById('page-header');
+                    if (headerEl) headerEl.innerText = config.siteName;
+                }
+                if(config.siteIcon) {
+                    const favicon = document.querySelector('link[rel="icon"]');
+                    if(favicon) favicon.href = config.siteIcon;
+                }
+            } catch (err) {
+                console.error("Error fetching config:", err);
+            }
+        }
+        fetchConfig();
+
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        border: "hsl(var(--border))",
+                        input: "hsl(var(--input))",
+                        ring: "hsl(var(--ring))",
+                        background: "hsl(var(--background))",
+                        foreground: "hsl(var(--foreground))",
+                        primary: {
+                            DEFAULT: "hsl(var(--primary))",
+                            foreground: "hsl(var(--primary-foreground))",
+                        },
+                        secondary: {
+                            DEFAULT: "hsl(var(--secondary))",
+                            foreground: "hsl(var(--secondary-foreground))",
+                        },
+                        destructive: {
+                            DEFAULT: "hsl(var(--destructive))",
+                            foreground: "hsl(var(--destructive-foreground))",
+                        },
+                        muted: {
+                            DEFAULT: "hsl(var(--muted))",
+                            foreground: "hsl(var(--muted-foreground))",
+                        },
+                        accent: {
+                            DEFAULT: "hsl(var(--accent))",
+                            foreground: "hsl(var(--accent-foreground))",
+                        },
+                        popover: {
+                            DEFAULT: "hsl(var(--popover))",
+                            foreground: "hsl(var(--popover-foreground))",
+                        },
+                        card: {
+                            DEFAULT: "hsl(var(--card))",
+                            foreground: "hsl(var(--card-foreground))",
+                        },
+                    },
+                    borderRadius: {
+                        lg: "var(--radius)",
+                        md: "calc(var(--radius) - 2px)",
+                        sm: "calc(var(--radius) - 4px)",
+                    },
+                },
+            },
+        }
+    </script>
+    <style>
+        :root {
+            --background: 0 0% 100%;
+            --foreground: 222.2 84% 4.9%;
+            --card: 0 0% 100%;
+            --card-foreground: 222.2 84% 4.9%;
+            --popover: 0 0% 100%;
+            --popover-foreground: 222.2 84% 4.9%;
+            --primary: 222.2 47.4% 11.2%;
+            --primary-foreground: 210 40% 98%;
+            --secondary: 210 40% 96.1%;
+            --secondary-foreground: 222.2 47.4% 11.2%;
+            --muted: 210 40% 96.1%;
+            --muted-foreground: 215.4 16.3% 46.9%;
+            --accent: 210 40% 96.1%;
+            --accent-foreground: 222.2 47.4% 11.2%;
+            --destructive: 0 84.2% 60.2%;
+            --destructive-foreground: 210 40% 98%;
+            --border: 214.3 31.8% 91.4%;
+            --input: 214.3 31.8% 91.4%;
+            --ring: 222.2 84% 4.9%;
+            --radius: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen p-8">
+    <!-- Loading Progress Bar -->
+    <div id="loading-progress-container" class="fixed top-0 left-0 w-full h-1 z-50 bg-transparent pointer-events-none">
+        <div id="loading-progress-bar" class="h-full bg-blue-500 transition-all duration-300 ease-out w-0"></div>
+    </div>
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- Header -->
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between py-4 border-b border-slate-200 gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 id="page-header" class="text-2xl font-bold text-slate-900">新锐博客旗下监控大屏</h1>
+                    <p class="text-sm text-slate-500">EdgeOne 站点流量与请求量分析</p>
+                </div>
+            </div>
+            <!-- Time Controls -->
+            <div class="flex flex-wrap items-end gap-4">
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-xs font-medium text-slate-500 uppercase tracking-wider">时间范围</label>
+                    <div class="flex gap-2">
+                        <button onclick="setTimeRange('1h')" class="time-range-btn h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm font-medium hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" data-value="1h">1小时</button>
+                        <button onclick="setTimeRange('today')" class="time-range-btn h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm font-medium hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" data-value="today">当天</button>
+                        <button onclick="setTimeRange('7d')" class="time-range-btn h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm font-medium hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" data-value="7d">七天</button>
+                        <button onclick="setTimeRange('31d')" class="time-range-btn h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm font-medium hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" data-value="31d">31天</button>
+                    </div>
+                    <input type="hidden" id="timeRange" value="1h">
+                </div>
+                <div class="flex flex-col gap-1.5">
+                    <label for="zoneId" class="text-xs font-medium text-slate-500 uppercase tracking-wider">选择站点</label>
+                    <select id="zoneId" onchange="refreshData()" class="h-9 w-[180px] rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
+                         <option value="*">加载中...</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="space-y-8">
+
+            <!-- Section 1: Traffic (流量) -->
+            <div class="space-y-5">
+                <h2 class="text-lg font-bold text-slate-800 section-title flex items-center gap-2">
+                    <svg class="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                    </svg>
+                    流量分析
+                </h2>
+                <div class="grid gap-4 md:grid-cols-3">
+                    <!-- Total Traffic Card -->
+                    <div class="rounded-xl border bg-white shadow-sm card-hover overflow-hidden">
+                        <div class="p-5">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-slate-500">总流量</p>
+                                    <p class="text-2xl font-bold text-slate-900 mt-1" id="kpi_l7Flow_flux">加载中...</p>
+                                </div>
+                                <div class="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-3">访问总流量统计</p>
+                        </div>
+                    </div>
+                    <!-- Client Request Traffic -->
+                    <div class="rounded-xl border bg-white shadow-sm card-hover overflow-hidden">
+                        <div class="p-5">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-slate-500">请求流量 (In)</p>
+                                    <p class="text-2xl font-bold text-slate-900 mt-1" id="kpi_l7Flow_inFlux">加载中...</p>
+                                </div>
+                                <div class="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-3">客户端请求流量</p>
+                        </div>
+                    </div>
+                    <!-- EdgeOne Response Traffic -->
+                    <div class="rounded-xl border bg-white shadow-sm card-hover overflow-hidden">
+                        <div class="p-5">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-slate-500">响应流量 (Out)</p>
+                                    <p class="text-2xl font-bold text-slate-900 mt-1" id="kpi_l7Flow_outFlux">加载中...</p>
+                                </div>
+                                <div class="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-3">EdgeOne 响应流量</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Traffic Chart -->
+                <div class="rounded-xl border bg-white shadow-sm card-hover">
+                    <div class="p-5 border-b border-slate-100">
+                        <h3 class="font-semibold text-slate-800">流量趋势</h3>
+                    </div>
+                    <div class="p-5">
+                        <div id="chart_traffic" class="w-full h-[320px]"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Bandwidth (带宽) -->
+            <div class="space-y-5 pt-6 border-t border-slate-200">
+                <h2 class="text-lg font-bold text-slate-800 section-title flex items-center gap-2">
+                    <svg class="h-5 w-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                    带宽分析
+                </h2>
+                <div class="grid gap-4 md:grid-cols-3">
+                    <!-- Total Bandwidth -->
+                    <div class="rounded-xl border bg-white shadow-sm card-hover overflow-hidden">
+                        <div class="p-5">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-slate-500">总带宽峰值</p>
+                                    <p class="text-2xl font-bold text-slate-900 mt-1" id="kpi_l7Flow_bandwidth">加载中...</p>
+                                </div>
+                                <div class="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-3">访问总带宽峰值</p>
+                        </div>
+                    </div>
+                    <!-- In Bandwidth -->
+                    <div class="rounded-xl border bg-white shadow-sm card-hover overflow-hidden">
+                        <div class="p-5">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-slate-500">请求带宽峰值 (In)</p>
+                                    <p class="text-2xl font-bold text-slate-900 mt-1" id="kpi_l7Flow_inBandwidth">加载中...</p>
+                                </div>
+                                <div class="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-3">客户端请求带宽峰值</p>
+                        </div>
+                    </div>
+                    <!-- Out Bandwidth -->
+                    <div class="rounded-xl border bg-white shadow-sm card-hover overflow-hidden">
+                        <div class="p-5">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-slate-500">响应带宽峰值 (Out)</p>
+                                    <p class="text-2xl font-bold text-slate-900 mt-1" id="kpi_l7Flow_outBandwidth">加载中...</p>
+                                </div>
+                                <div class="w-12 h-12 bg-rose-50 rounded-xl flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-3">EdgeOne 响应带宽峰值</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Bandwidth Chart -->
+                <div class="rounded-xl border bg-white shadow-sm card-hover">
+                    <div class="p-5 border-b border-slate-100">
+                        <h3 class="font-semibold text-slate-800">带宽趋势</h3>
+                    </div>
+                    <div class="p-5">
+                        <div id="chart_bandwidth" class="w-full h-[320px]"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 4: Requests & Performance (请求与性能) -->
+            <div class="space-y-5 pt-6 border-t border-slate-200">
+                <h2 class="text-lg font-bold text-slate-800 section-title flex items-center gap-2">
+                    <svg class="h-5 w-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    请求与性能
+                </h2>
+                <div class="grid gap-4 md:grid-cols-3">
+                    <!-- Total Requests -->
+                    <div class="rounded-xl border bg-white shadow-sm card-hover overflow-hidden">
+                        <div class="p-5">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-slate-500">总请求数</p>
+                                    <p class="text-2xl font-bold text-slate-900 mt-1" id="kpi_l7Flow_request">加载中...</p>
+                                </div>
+                                <div class="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-3">总请求次数统计</p>
+                        </div>
+                    </div>
+                    <!-- Avg Response Time -->
+                    <div class="rounded-xl border bg-white shadow-sm card-hover overflow-hidden">
+                        <div class="p-5">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-slate-500">平均响应耗时</p>
+                                    <p class="text-2xl font-bold text-slate-900 mt-1" id="kpi_l7Flow_avgResponseTime">加载中...</p>
+                                </div>
+                                <div class="w-12 h-12 bg-cyan-50 rounded-xl flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-3">L7 访问平均响应耗时 (ms)</p>
+                        </div>
+                    </div>
+                    <!-- Avg First Byte Time -->
+                    <div class="rounded-xl border bg-white shadow-sm card-hover overflow-hidden">
+                        <div class="p-5">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-slate-500">平均首字节耗时</p>
+                                    <p class="text-2xl font-bold text-slate-900 mt-1" id="kpi_l7Flow_avgFirstByteResponseTime">加载中...</p>
+                                </div>
+                                <div class="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-3">L7 平均首字节响应耗时 (ms)</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid gap-4 md:grid-cols-2">
+                    <!-- Requests Chart -->
+                    <div class="rounded-xl border bg-white shadow-sm card-hover">
+                        <div class="p-5 border-b border-slate-100">
+                            <h3 class="font-semibold text-slate-800">请求数趋势</h3>
+                        </div>
+                        <div class="p-5">
+                            <div id="chart_requests" class="w-full h-[300px]"></div>
+                        </div>
+                    </div>
+                    <!-- Performance Chart -->
+                    <div class="rounded-xl border bg-white shadow-sm card-hover">
+                        <div class="p-5 border-b border-slate-100">
+                            <h3 class="font-semibold text-slate-800">响应耗时趋势</h3>
+                        </div>
+                        <div class="p-5">
+                            <div id="chart_performance" class="w-full h-[300px]"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 6: Top Analysis (TOP 分析) -->
+            <div class="space-y-5 pt-6 border-t border-slate-200">
+                <h2 class="text-lg font-bold text-slate-800 section-title flex items-center gap-2">
+                    <svg class="h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                    </svg>
+                    TOP 分析
+                </h2>
+                <div class="grid gap-4 md:grid-cols-3">
+                    <!-- Domain -->
+                    <div class="rounded-xl border bg-white shadow-sm card-hover">
+                        <div class="p-5 border-b border-slate-100 flex items-center gap-2">
+                            <div class="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
+                                </svg>
+                            </div>
+                            <h3 class="font-semibold text-slate-800">域名流量排行</h3>
+                        </div>
+                        <div class="p-5">
+                            <div id="chart_top_domain" class="w-full h-[240px] min-h-[200px]"></div>
+                        </div>
+                    </div>
+
+                    <!-- URL -->
+                    <div class="rounded-xl border bg-white shadow-sm card-hover">
+                        <div class="p-5 border-b border-slate-100 flex items-center gap-2">
+                            <div class="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                                </svg>
+                            </div>
+                            <h3 class="font-semibold text-slate-800">URL 流量排行</h3>
+                        </div>
+                        <div class="p-5">
+                            <div id="chart_top_url" class="w-full h-[240px] min-h-[200px]"></div>
+                        </div>
+                    </div>
+                    <!-- URL Requests -->
+                    <div class="rounded-xl border bg-white shadow-sm card-hover">
+                        <div class="p-5 border-b border-slate-100 flex items-center gap-2">
+                            <div class="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/>
+                                </svg>
+                            </div>
+                            <h3 class="font-semibold text-slate-800">URL 请求数排行</h3>
+                        </div>
+                        <div class="p-5">
+                            <div id="chart_top_request_url" class="w-full h-[240px] min-h-[200px]"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer -->
+        <div class="flex flex-col justify-center items-center pt-10 pb-6 text-sm text-slate-500 space-y-3 border-t border-slate-200 mt-8">
+            <div class="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 text-center">
+                <a href="https://beian.miit.gov.cn/" target="_blank" class="hover:text-blue-600 transition-colors">京ICP备12345678号</a>
+                <span class="hidden sm:inline">|</span>
+                <span>本项目基于 <a href="https://github.com/afoim/eo_monitior" target="_blank" class="font-medium text-slate-700 hover:text-blue-600 transition-colors">AcoFork/eo_monitor</a> 二次开发</span>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // ECharts instance variables
+        let chartTraffic = null;
+        let chartBandwidth = null;
+        let chartRequests = null;
+        let chartPerformance = null;
+        let chartTopDomain = null;
+        let chartTopUrl = null;
+        let chartTopRequestUrl = null;
+
+        const provinceMap = {
+            '22': '北京', '86': '内蒙古', '146': '山西', '1069': '河北', '1177': '天津',
+            '119': '宁夏', '152': '陕西', '1208': '甘肃', '1467': '青海', '1468': '新疆',
+            '145': '黑龙江', '1445': '吉林', '1464': '辽宁', '2': '福建', '120': '江苏',
+            '121': '安徽', '122': '山东', '1050': '上海', '1442': '浙江', '182': '河南',
+            '1135': '湖北', '1465': '江西', '1466': '湖南', '118': '贵州', '153': '云南',
+            '1051': '重庆', '1068': '四川', '1155': '西藏', '4': '广东', '173': '广西',
+            '1441': '海南', '0': '其他', '1': '港澳台', '-1': '境外'
+        };
+
+        const countryMap = {
+            'CN': '中国大陆', 'AF': '阿富汗', 'MV': '马尔代夫', 'AM': '亚美尼亚', 'MN': '蒙古', 'AZ': '阿塞拜疆',
+            'MM': '缅甸', 'BH': '巴林', 'NP': '尼泊尔', 'BD': '孟加拉', 'KP': '朝鲜',
+            'BT': '不丹', 'OM': '阿曼', 'IO': '英属印度洋领地', 'PK': '巴基斯坦', 'KH': '柬埔寨',
+            'PS': '巴勒斯坦', 'CX': '圣诞岛', 'PH': '菲律宾', 'HK': '中国香港', 'QA': '卡塔尔',
+            'IN': '印度', 'SA': '沙特阿拉伯', 'ID': '印度尼西亚', 'SG': '新加坡', 'IR': '伊朗',
+            'KR': '韩国', 'IQ': '伊拉克', 'LK': '斯里兰卡', 'IL': '以色列', 'SY': '叙利亚',
+            'JP': '日本', 'TW': '中国台湾', 'JO': '约旦', 'TJ': '塔吉克斯坦', 'KZ': '哈萨克斯坦',
+            'TH': '泰国', 'KW': '科威特', 'TM': '土库曼斯坦', 'KG': '吉尔吉斯斯坦', 'AE': '阿联酋',
+            'LA': '老挝', 'UZ': '乌兹别克斯坦', 'LB': '黎巴嫩', 'VN': '越南', 'MO': '中国澳门',
+            'YE': '也门', 'MY': '马来西亚', 'TR': '土耳其', 'AX': '奥兰群岛', 'IT': '意大利',
+            'AL': '阿尔巴尼亚', 'JE': '泽西岛', 'AD': '安道尔', 'LT': '立陶宛', 'AT': '奥地利',
+            'LU': '卢森堡', 'BY': '白俄罗斯', 'MK': '马其顿', 'BE': '比利时', 'MT': '马耳他',
+            'BA': '波黑', 'MD': '摩尔多瓦', 'BG': '保加利亚', 'MC': '摩纳哥', 'BQ': '荷兰加勒比区',
+            'ME': '黑山', 'HR': '克罗地亚', 'NL': '荷兰', 'CZ': '捷克', 'NO': '挪威',
+            'DK': '丹麦', 'PL': '波兰', 'EE': '爱沙尼亚', 'PT': '葡萄牙', 'FO': '法罗群岛',
+            'RO': '罗马尼亚', 'FI': '芬兰', 'RU': '俄罗斯', 'FR': '法国', 'SM': '圣马力诺',
+            'DE': '德国', 'RS': '塞尔维亚', 'GI': '直布罗陀', 'SX': '荷属圣马丁', 'GR': '希腊',
+            'SK': '斯洛伐克', 'GG': '根西岛', 'ES': '西班牙', 'HU': '匈牙利', 'SE': '瑞典',
+            'IS': '冰岛', 'CH': '瑞士', 'IE': '爱尔兰', 'UA': '乌克兰', 'IM': '马恩岛',
+            'GB': '英国', 'DZ': '阿尔及利亚', 'ML': '马里', 'AO': '安哥拉', 'MR': '毛里塔尼亚',
+            'BJ': '贝宁', 'MU': '毛里求斯', 'BW': '博茨瓦纳', 'YT': '马约特', 'BF': '布基纳法索',
+            'MA': '摩洛哥', 'BI': '布隆迪', 'MZ': '莫桑比克', 'CM': '喀麦隆', 'NA': '纳米比亚',
+            'CV': '佛得角', 'NE': '尼日尔', 'CF': '中非', 'NG': '尼日利亚', 'TD': '乍得',
+            'RW': '卢旺达', 'KM': '科摩罗', 'SH': '圣赫勒拿', 'DJ': '吉布提', 'ST': '圣多美和普林西比',
+            'EG': '埃及', 'SN': '塞内加尔', 'GQ': '赤道几内亚', 'SC': '塞舌尔', 'ER': '厄立特里亚',
+            'SL': '塞拉利昂', 'ET': '埃塞俄比亚', 'SO': '索马里', 'GA': '加蓬', 'ZA': '南非',
+            'GM': '冈比亚', 'SS': '南苏丹', 'GH': '加纳', 'SD': '苏丹', 'GN': '几内亚',
+            'SZ': '斯威士兰', 'GW': '几内亚比绍', 'TZ': '坦桑尼亚', 'KE': '肯尼亚', 'TG': '多哥',
+            'LS': '莱索托', 'TN': '突尼斯', 'LR': '利比里亚', 'UG': '乌干达', 'LY': '利比亚',
+            'EH': '西撒哈拉', 'MG': '马达加斯加', 'ZM': '赞比亚', 'MW': '马拉维', 'ZW': '津巴布韦',
+            'CD': '刚果民主共和国', 'CG': '刚果共和国', 'CI': '科特迪瓦', 'AU': '澳大利亚', 'NF': '诺福克岛',
+            'CK': '库克群岛', 'MP': '北马里亚纳群岛', 'TL': '东帝汶', 'PW': '帕劳', 'GU': '关岛',
+            'PG': '巴布亚新几内亚', 'KI': '基里巴斯', 'SB': '所罗门群岛', 'MH': '马绍尔群岛', 'TO': '汤加',
+            'NR': '瑙鲁', 'TV': '图瓦卢', 'NZ': '新西兰', 'AI': '安圭拉', 'HT': '海地',
+            'AG': '安提瓜和巴布达', 'HN': '洪都拉斯', 'AW': '阿鲁巴', 'JM': '牙买加', 'BS': '巴哈马',
+            'MX': '墨西哥', 'BB': '巴巴多斯', 'MS': '蒙塞拉特岛', 'BM': '百慕大', 'NI': '尼加拉瓜',
+            'CA': '加拿大', 'PA': '巴拿马', 'KY': '开曼群岛', 'PR': '波多黎各', 'CR': '哥斯达黎加',
+            'KN': '圣基茨和尼维斯', 'CU': '古巴', 'LC': '圣卢西亚', 'CW': '库拉索', 'MF': '法属圣马丁',
+            'SV': '萨尔瓦多', 'TT': '特立尼达和多巴哥', 'GL': '格陵兰岛', 'TC': '特克斯和凯科斯群岛',
+            'GD': '格林纳达', 'US': '美国', 'GT': '危地马拉', 'AR': '阿根廷', 'GY': '圭亚那',
+            'BO': '玻利维亚', 'PY': '巴拉圭', 'BR': '巴西', 'PE': '秘鲁', 'CL': '智利',
+            'SR': '苏里南', 'CO': '哥伦比亚', 'UY': '乌拉圭', 'EC': '厄瓜多尔', 'VE': '委内瑞拉',
+            'GF': '法属圭亚那', 'Antarctica': '南极洲'
+        };
+
+        const codeToMapName = {
+            'CN': 'China', 'AF': 'Afghanistan', 'AL': 'Albania', 'DZ': 'Algeria', 'AO': 'Angola', 'AR': 'Argentina',
+            'AM': 'Armenia', 'AU': 'Australia', 'AT': 'Austria', 'AZ': 'Azerbaijan', 'BS': 'Bahamas', 'BH': 'Bahrain',
+            'BD': 'Bangladesh', 'BB': 'Barbados', 'BY': 'Belarus', 'BE': 'Belgium', 'BZ': 'Belize', 'BJ': 'Benin',
+            'BT': 'Bhutan', 'BO': 'Bolivia', 'BA': 'Bosnia and Herzegovina', 'BW': 'Botswana', 'BR': 'Brazil',
+            'BN': 'Brunei', 'BG': 'Bulgaria', 'BF': 'Burkina Faso', 'BI': 'Burundi', 'KH': 'Cambodia', 'CM': 'Cameroon',
+            'CA': 'Canada', 'CF': 'Central African Republic', 'TD': 'Chad', 'CL': 'Chile', 'CO': 'Colombia',
+            'KM': 'Comoros', 'CG': 'Republic of the Congo', 'CD': 'Democratic Republic of the Congo', 'CR': 'Costa Rica',
+            'HR': 'Croatia', 'CU': 'Cuba', 'CY': 'Cyprus', 'CZ': 'Czech Republic', 'DK': 'Denmark', 'DJ': 'Djibouti',
+            'DO': 'Dominican Republic', 'EC': 'Ecuador', 'EG': 'Egypt', 'SV': 'El Salvador', 'GQ': 'Equatorial Guinea',
+            'ER': 'Eritrea', 'EE': 'Estonia', 'ET': 'Ethiopia', 'FJ': 'Fiji', 'FI': 'Finland', 'FR': 'France',
+            'GA': 'Gabon', 'GM': 'Gambia', 'GE': 'Georgia', 'DE': 'Germany', 'GH': 'Ghana', 'GR': 'Greece',
+            'GT': 'Guatemala', 'GN': 'Guinea', 'GW': 'Guinea-Bissau', 'GY': 'Guyana', 'HT': 'Haiti', 'HN': 'Honduras',
+            'HU': 'Hungary', 'IS': 'Iceland', 'IN': 'India', 'ID': 'Indonesia', 'IR': 'Iran', 'IQ': 'Iraq',
+            'IE': 'Ireland', 'IL': 'Israel', 'IT': 'Italy', 'CI': 'Ivory Coast', 'JM': 'Jamaica', 'JP': 'Japan',
+            'JO': 'Jordan', 'KZ': 'Kazakhstan', 'KE': 'Kenya', 'KP': 'North Korea', 'KR': 'South Korea',
+            'KW': 'Kuwait', 'KG': 'Kyrgyzstan', 'LA': 'Laos', 'LV': 'Latvia', 'LB': 'Lebanon', 'LS': 'Lesotho',
+            'LR': 'Liberia', 'LY': 'Libya', 'LT': 'Lithuania', 'LU': 'Luxembourg', 'MK': 'Macedonia', 'MG': 'Madagascar',
+            'MW': 'Malawi', 'MY': 'Malaysia', 'ML': 'Mali', 'MT': 'Malta', 'MR': 'Mauritania', 'MU': 'Mauritius',
+            'MX': 'Mexico', 'MD': 'Moldova', 'MN': 'Mongolia', 'ME': 'Montenegro', 'MA': 'Morocco', 'MZ': 'Mozambique',
+            'MM': 'Myanmar', 'NA': 'Namibia', 'NP': 'Nepal', 'NL': 'Netherlands', 'NZ': 'New Zealand', 'NI': 'Nicaragua',
+            'NE': 'Niger', 'NG': 'Nigeria', 'NO': 'Norway', 'OM': 'Oman', 'PK': 'Pakistan', 'PA': 'Panama',
+            'PG': 'Papua New Guinea', 'PY': 'Paraguay', 'PE': 'Peru', 'PH': 'Philippines', 'PL': 'Poland',
+            'PT': 'Portugal', 'PR': 'Puerto Rico', 'QA': 'Qatar', 'RO': 'Romania', 'RU': 'Russia', 'RW': 'Rwanda',
+            'SA': 'Saudi Arabia', 'SN': 'Senegal', 'RS': 'Serbia', 'SL': 'Sierra Leone', 'SG': 'Singapore',
+            'SK': 'Slovakia', 'SI': 'Slovenia', 'SB': 'Solomon Islands', 'SO': 'Somalia', 'ZA': 'South Africa',
+            'SS': 'South Sudan', 'ES': 'Spain', 'LK': 'Sri Lanka', 'SD': 'Sudan', 'SR': 'Suriname', 'SZ': 'Swaziland',
+            'SE': 'Sweden', 'CH': 'Switzerland', 'SY': 'Syria', 'TW': 'Taiwan', 'TJ': 'Tajikistan', 'TZ': 'Tanzania',
+            'TH': 'Thailand', 'TL': 'Timor-Leste', 'TG': 'Togo', 'TT': 'Trinidad and Tobago', 'TN': 'Tunisia',
+            'TR': 'Turkey', 'TM': 'Turkmenistan', 'UG': 'Uganda', 'UA': 'Ukraine', 'AE': 'United Arab Emirates',
+            'GB': 'United Kingdom', 'US': 'United States', 'UY': 'Uruguay', 'UZ': 'Uzbekistan', 'VU': 'Vanuatu',
+            'VE': 'Venezuela', 'VN': 'Vietnam', 'YE': 'Yemen', 'ZM': 'Zambia', 'ZW': 'Zimbabwe'
+        };
+
+        const worldNameMap = {};
+        Object.keys(codeToMapName).forEach(code => {
+            if (countryMap[code]) {
+                worldNameMap[codeToMapName[code]] = countryMap[code];
+            }
+        });
+
+        const metricsConfig = {
+            traffic: ['l7Flow_flux', 'l7Flow_inFlux', 'l7Flow_outFlux'],
+            bandwidth: ['l7Flow_bandwidth', 'l7Flow_inBandwidth', 'l7Flow_outBandwidth'],
+            requests: ['l7Flow_request'],
+            performance: ['l7Flow_avgResponseTime', 'l7Flow_avgFirstByteResponseTime'],
+            topAnalysis: ['l7Flow_outFlux_domain', 'l7Flow_outFlux_url', 'l7Flow_request_url']
+        };
+
+        const metricLabels = {
+            'l7Flow_flux': '总流量',
+            'l7Flow_inFlux': '客户端请求流量',
+            'l7Flow_outFlux': '响应流量',
+            'l7Flow_bandwidth': '总带宽',
+            'l7Flow_inBandwidth': '请求带宽',
+            'l7Flow_outBandwidth': '响应带宽',
+            'l7Flow_request': '请求数',
+            'l7Flow_avgResponseTime': '平均响应耗时',
+            'l7Flow_avgFirstByteResponseTime': '平均首字节耗时',
+            'l7Flow_outFlux_domain': '域名流量',
+            'l7Flow_outFlux_url': 'URL 流量',
+            'l7Flow_request_url': 'URL 请求数'
+        };
+
+        const metricColors = {
+            'l7Flow_flux': '#3b82f6', // blue
+            'l7Flow_inFlux': '#f59e0b', // amber
+            'l7Flow_outFlux': '#10b981', // green
+            'l7Flow_bandwidth': '#8b5cf6', // purple
+            'l7Flow_inBandwidth': '#ec4899', // pink
+            'l7Flow_outBandwidth': '#06b6d4', // cyan
+            'l7Flow_request': '#f43f5e', // rose
+            'l7Flow_avgResponseTime': '#ef4444', // red
+            'l7Flow_avgFirstByteResponseTime': '#f97316', // orange
+            'l7Flow_outFlux_domain': '#06b6d4', // cyan
+            'l7Flow_outFlux_url': '#10b981', // green
+            'l7Flow_request_url': '#10b981' // green
+        };
+
+        /** Tool Functions **/
+
+        function formatDate(date) {
+            return date.toISOString().slice(0, 19) + 'Z';
+        }
+
+        function setTimeRange(range, shouldRefresh = true) {
+            document.getElementById('timeRange').value = range;
+            
+            // 更新按钮样式
+            document.querySelectorAll('.time-range-btn').forEach(btn => {
+                if (btn.dataset.value === range) {
+                    btn.classList.remove('bg-white', 'border-slate-200');
+                    btn.classList.add('bg-blue-500', 'border-blue-500', 'text-white');
+                } else {
+                    btn.classList.remove('bg-blue-500', 'border-blue-500', 'text-white');
+                    btn.classList.add('bg-white', 'border-slate-200');
+                }
+            });
+            
+            if (shouldRefresh) {
+                refreshData();
+            }
+        }
+
+        function calculateTimeRange() {
+            const range = document.getElementById('timeRange').value;
+            const now = new Date();
+            let endTime = new Date(now);
+            let startTime;
+
+            switch(range) {
+                case '1h': startTime = new Date(now.getTime() - 1 * 60 * 60 * 1000); break;
+                case 'today': 
+                    startTime = new Date(now);
+                    startTime.setHours(0, 0, 0, 0);
+                    break;
+                case '7d': startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+                case '31d': startTime = new Date(now.getTime() - 31 * 24 * 60 * 60 * 1000); break;
+                default: startTime = new Date(now.getTime() - 1 * 60 * 60 * 1000);
+            }
+
+            return {
+                startTime: formatDate(startTime),
+                endTime: formatDate(endTime)
+            };
+        }
+
+        function calculatePreviousRange(startStr, endStr) {
+            const start = new Date(startStr);
+            const end = new Date(endStr);
+            const duration = end.getTime() - start.getTime();
+            const prevEnd = new Date(start.getTime()); 
+            const prevStart = new Date(prevEnd.getTime() - duration);
+            return {
+                prevStartTime: formatDate(prevStart),
+                prevEndTime: formatDate(prevEnd)
+            };
+        }
+
+        function renderGrowth(elementId, currentVal, prevVal, inverse = false) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+
+            let growthEl = document.getElementById(elementId + '_growth');
+            if (!growthEl) {
+                growthEl = document.createElement('span');
+                growthEl.id = elementId + '_growth';
+                el.appendChild(growthEl);
+            }
+
+            if (prevVal === 0) {
+                growthEl.innerText = ''; 
+                return;
+            }
+
+            const growth = ((currentVal - prevVal) / prevVal) * 100;
+            const absGrowth = Math.abs(growth).toFixed(2);
+            
+            // Color Logic: 
+            // All: Increase = Red, Decrease = Green
+            
+            let colorClass = 'text-gray-500';
+            let icon = '';
+            
+            if (growth > 0) {
+                icon = '↑';
+                colorClass = 'text-red-500';
+            } else if (growth < 0) {
+                icon = '↓';
+                colorClass = 'text-green-500';
+            } else {
+                icon = '-';
+            }
+
+            growthEl.className = `text-sm font-normal ml-2 ${colorClass}`;
+            growthEl.innerText = `${icon} ${absGrowth}%`;
+        }
+
+        async function fetchData(metric, customStart, customEnd) {
+            try {
+                let startTime, endTime;
+                if (customStart && customEnd) {
+                    startTime = customStart;
+                    endTime = customEnd;
+                } else {
+                    const range = calculateTimeRange();
+                    startTime = range.startTime;
+                    endTime = range.endTime;
+                }
+
+                const zoneId = document.getElementById('zoneId').value.trim();
+                
+                let url = `/api/traffic?metric=${metric}&startTime=${encodeURIComponent(startTime)}&endTime=${encodeURIComponent(endTime)}`;
+                // 粒度始终自动，不添加 interval 参数
+                if (zoneId) {
+                    url += `&zoneId=${encodeURIComponent(zoneId)}`;
+                }
+
+                const response = await fetch(url);
+                const result = await response.json();
+                if (result.error) throw new Error(result.error);
+                return result;
+            } catch (err) {
+                console.error(`Error fetching ${metric}:`, err);
+                return null;
+            }
+        }
+
+        function processData(result, targetMetric) {
+            // Check for Top Data Structure (DescribeTopL7AnalysisData)
+            // It returns Data[0].DetailData (Array of Key/Value)
+            if (result?.Data?.[0]?.DetailData) {
+                 return {
+                     type: 'top',
+                     data: result.Data[0].DetailData
+                 };
+            }
+
+            // DescribeTimingL7AnalysisData returns 'Data'
+            // DescribeTimingL7OriginPullData returns 'TimingDataRecords'
+            const dataList = result?.Data || result?.TimingDataRecords || [];
+            if (dataList.length === 0) return { timeData: [], valueData: [], sum: 0, max: 0, avg: 0, type: 'time' };
+
+            let typeValue;
+            
+            // Try to find matching metric in TypeValue or Value
+            if (targetMetric) {
+                if (dataList[0]?.TypeValue) {
+                    typeValue = dataList[0].TypeValue.find(item => item.MetricName === targetMetric);
+                } else if (dataList[0]?.Value) {
+                    typeValue = dataList[0].Value.find(item => item.MetricName === targetMetric);
+                }
+            }
+
+            // Fallback if not found or no targetMetric (or if only one exists)
+            if (!typeValue) {
+                 typeValue = dataList[0]?.TypeValue?.[0];
+                 // Support DescribeWebProtectionData structure (Value instead of TypeValue)
+                 if (!typeValue && dataList[0]?.Value?.[0]) {
+                    typeValue = dataList[0].Value[0];
+                 }
+            }
+
+            const details = typeValue?.Detail || [];
+            const sum = typeValue?.Sum || 0;
+            const max = typeValue?.Max || 0;
+            const avg = typeValue?.Avg || 0;
+
+            const timeData = [];
+            const valueData = [];
+
+            // Context for formatting
+            const range = document.getElementById('timeRange')?.value || '1h';
+            const longRanges = ['7d', '31d'];
+            
+            // 粒度始终自动，自动检测是否是日级别间隔
+            let isDayInterval = false;
+            if (details.length > 1) {
+                const diff = details[1].Timestamp - details[0].Timestamp;
+                // If interval is >= 23 hours (allow some slack), treat as day
+                if (diff >= 82800) isDayInterval = true;
+            }
+            // 长周期范围通常使用日粒度
+            if (['31d'].includes(range)) {
+                // Check if we have few points (e.g. < 32 for 31d), likely day
+                if (details.length <= 32) isDayInterval = true;
+            }
+
+            // Calculate time span of the data
+            let span = 0;
+            if (details.length > 0) {
+                 span = details[details.length - 1].Timestamp - details[0].Timestamp;
+            }
+
+            details.forEach(item => {
+                const date = new Date(item.Timestamp * 1000);
+                let label;
+
+                if (isDayInterval) {
+                    // Show YYYY-MM-DD
+                    label = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+                } else if (span > 86400 || longRanges.includes(range) || (range === 'custom' && span > 86400)) {
+                    // Show MM-DD HH:mm for long ranges or custom > 24h
+                    label = `${(date.getMonth()+1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+                } else {
+                    // Show HH:mm for short ranges
+                    label = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+                }
+
+                timeData.push(label);
+                valueData.push(item.Value);
+            });
+
+            return { timeData, valueData, sum, max, avg, type: 'time' };
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            if (i < 0) return bytes + ' B';
+            if (i >= sizes.length) return (bytes / Math.pow(k, sizes.length - 1)).toFixed(2) + ' ' + sizes[sizes.length - 1];
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatBps(bps) {
+            if (bps === 0) return '0 bps';
+            const k = 1024;
+            const sizes = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps', 'Pbps', 'Ebps', 'Zbps', 'Ybps'];
+            const i = Math.floor(Math.log(bps) / Math.log(k));
+            if (i < 0) return bps + ' bps';
+            if (i >= sizes.length) return (bps / Math.pow(k, sizes.length - 1)).toFixed(2) + ' ' + sizes[sizes.length - 1];
+            return parseFloat((bps / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatCount(num) {
+            if (num === 0) return '0';
+            if (num < 1000) return num.toString();
+            if (num < 10000) return (num / 1000).toFixed(2) + ' 千';
+            if (num < 100000000) return (num / 10000).toFixed(2) + ' 万';
+            return (num / 100000000).toFixed(2) + ' 亿';
+        }
+
+        function getBestCountUnit(maxValue) {
+            if (maxValue < 1000) return { unit: '次', divisor: 1 };
+            if (maxValue < 10000) return { unit: '千次', divisor: 1000 };
+            if (maxValue < 100000000) return { unit: '万次', divisor: 10000 };
+            return { unit: '亿次', divisor: 100000000 };
+        }
+
+        function getBestUnit(maxValue, type = 'bytes') {
+            const k = 1024;
+            const byteUnits = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+            const bitUnits = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps', 'Pbps'];
+            const units = type === 'bandwidth' ? bitUnits : byteUnits;
+
+            if (maxValue === 0) return { unit: units[0], divisor: 1 };
+
+            let i = Math.floor(Math.log(maxValue) / Math.log(k));
+            if (i < 0) i = 0;
+            if (i >= units.length) i = units.length - 1;
+
+            return { unit: units[i], divisor: Math.pow(k, i) };
+        }
+
+        /** Feature Functions **/
+
+        async function fetchZones() {
+            try {
+                const response = await fetch('/api/zones');
+                const result = await response.json();
+                
+                const select = document.getElementById('zoneId');
+                // Keep the current selection if possible, or default to *
+                const currentVal = select.value;
+                select.innerHTML = ''; 
+
+                // Always add "All Zones" option
+                const allOption = document.createElement('option');
+                allOption.value = "*";
+                allOption.text = "全部站点";
+                select.appendChild(allOption);
+
+                if (result.Zones && result.Zones.length > 0) {
+                    result.Zones.forEach(zone => {
+                        const option = document.createElement('option');
+                        option.value = zone.ZoneId;
+                        option.text = zone.ZoneName;
+                        select.appendChild(option);
+                    });
+                }
+                
+                // Restore selection if it exists in new options, otherwise default to *
+                if (currentVal && Array.from(select.options).some(o => o.value === currentVal)) {
+                    select.value = currentVal;
+                } else {
+                    select.value = "*";
+                }
+
+            } catch (err) {
+                console.error("Error fetching zones:", err);
+                const select = document.getElementById('zoneId');
+                // If error, ensure we have at least the default * option
+                if (select.options.length === 0 || select.options[0].value !== '*') {
+                     select.innerHTML = '<option value="*">获取站点失败 (默认为全部)</option>';
+                }
+            }
+        }
+
+        ////ENTRANCE////
+        async function initDashboard() {
+            // Initialize charts
+            chartTraffic = echarts.init(document.getElementById('chart_traffic'));
+            chartBandwidth = echarts.init(document.getElementById('chart_bandwidth'));
+            chartRequests = echarts.init(document.getElementById('chart_requests'));
+            chartPerformance = echarts.init(document.getElementById('chart_performance'));
+            chartTopDomain = echarts.init(document.getElementById('chart_top_domain'));
+            chartTopUrl = echarts.init(document.getElementById('chart_top_url'));
+            chartTopRequestUrl = echarts.init(document.getElementById('chart_top_request_url'));
+
+            // 初始化时间范围按钮样式（不刷新数据）
+            setTimeRange('today', false);
+            
+            // 使用 ResizeObserver 监听图表容器大小变化
+            const resizeObserver = new ResizeObserver((entries) => {
+                entries.forEach(() => {
+                    chartTraffic && chartTraffic.resize();
+                    chartBandwidth && chartBandwidth.resize();
+                    chartRequests && chartRequests.resize();
+                    chartPerformance && chartPerformance.resize();
+                    chartTopDomain && chartTopDomain.resize();
+                    chartTopUrl && chartTopUrl.resize();
+                    chartTopRequestUrl && chartTopRequestUrl.resize();
+                });
+            });
+            
+            // 监听所有图表容器
+            document.getElementById('chart_traffic') && resizeObserver.observe(document.getElementById('chart_traffic'));
+            document.getElementById('chart_bandwidth') && resizeObserver.observe(document.getElementById('chart_bandwidth'));
+            document.getElementById('chart_requests') && resizeObserver.observe(document.getElementById('chart_requests'));
+            document.getElementById('chart_performance') && resizeObserver.observe(document.getElementById('chart_performance'));
+            document.getElementById('chart_top_domain') && resizeObserver.observe(document.getElementById('chart_top_domain'));
+            document.getElementById('chart_top_url') && resizeObserver.observe(document.getElementById('chart_top_url'));
+            document.getElementById('chart_top_request_url') && resizeObserver.observe(document.getElementById('chart_top_request_url'));
+            
+            await fetchZones(); // Fetch zones first
+            await refreshData();
+        }
+
+        async function refreshData() {
+            // Show loading
+            document.querySelectorAll('[id^="kpi_"]').forEach(el => el.innerText = '加载中...');
+
+            // Initialize Progress Bar
+            const progressBar = document.getElementById('loading-progress-bar');
+            if (progressBar) {
+                progressBar.style.width = '0%';
+                progressBar.classList.remove('bg-red-500');
+                progressBar.classList.add('bg-blue-500');
+                progressBar.parentElement.classList.remove('opacity-0');
+                progressBar.parentElement.classList.remove('hidden');
+            }
+
+            const { startTime, endTime } = calculateTimeRange();
+
+            // Fetch all metrics
+            const allMetrics = [
+                ...metricsConfig.traffic,
+                ...metricsConfig.bandwidth,
+                ...metricsConfig.requests,
+                ...metricsConfig.performance,
+                ...metricsConfig.topAnalysis
+            ];
+
+            const results = {};
+            
+            // Progress Bar Logic
+            let totalTasks = 3 + allMetrics.length * 2;
+            let completedTasks = 0;
+            let hasError = false;
+
+            const updateProgress = (success = true) => {
+                completedTasks++;
+                if (!success) hasError = true;
+                
+                const percentage = Math.min((completedTasks / totalTasks) * 100, 100);
+                if (progressBar) {
+                    progressBar.style.width = `${percentage}%`;
+                    if (hasError) {
+                        progressBar.classList.remove('bg-blue-500');
+                        progressBar.classList.add('bg-red-500');
+                    }
+                    
+                    if (completedTasks >= totalTasks) {
+                        setTimeout(() => {
+                             progressBar.style.width = '100%'; // Ensure full width
+                             setTimeout(() => {
+                                 progressBar.style.width = '0%';
+                                 // progressBar.parentElement.classList.add('hidden'); 
+                             }, 500);
+                        }, 200);
+                    }
+                }
+            };
+            
+            // Parallel fetch
+            const { prevStartTime, prevEndTime } = calculatePreviousRange(startTime, endTime);
+
+            // Group metrics by section for efficient updates
+            const updateMap = {
+                'traffic': updateTrafficSection,
+                'bandwidth': updateBandwidthSection,
+                'requests': updateRequestsSection,
+                'performance': updatePerformanceSection,
+                'topAnalysis': updateTopAnalysisSection
+            };
+
+            // Helper to determine which section a metric belongs to
+            const getSection = (metric) => {
+                 for (const [section, metrics] of Object.entries(metricsConfig)) {
+                     if (metrics.includes(metric)) return section;
+                 }
+                 return null;
+            };
+
+            // Track pending updates per section to avoid too many renders (debounce-like)
+            // But since we want "show as soon as available", we can update per metric or per section group.
+            // Updating per metric might be too granular for charts that share multiple metrics (like Traffic Chart has 3 lines).
+            // So we will trigger section update whenever a metric in that section is ready.
+            
+            // To prevent flickering or partial charts, we might want to wait for all metrics IN A SECTION to be ready?
+            // The user said "whichever metric is fetched, show it". 
+            // For KPIs, this is easy. For charts with multiple lines, adding one line at a time is fine too (ECharts supports merge).
+            
+            // Let's iterate all metrics and fire requests in parallel
+            allMetrics.forEach((metric) => {
+                const section = getSection(metric);
+
+                // 1. Fetch Current Data
+                fetchData(metric).then(res => {
+                    if (res) {
+                        results[metric] = processData(res, metric);
+                        // Update UI immediately when current data arrives
+                        if (section && updateMap[section]) {
+                            updateMap[section](results);
+                        }
+                        updateProgress(true);
+                    } else {
+                        updateProgress(false);
+                    }
+                }).catch(e => {
+                    console.error(`Error loading metric ${metric}:`, e);
+                    updateProgress(false);
+                });
+
+                // 2. Fetch Previous Data (Parallel)
+                fetchData(metric, prevStartTime, prevEndTime).then(prevRes => {
+                    if (prevRes) {
+                        results[metric + '_prev'] = processData(prevRes, metric);
+                        // Re-update UI to show growth (only if current data is already there)
+                        if (results[metric] && section && updateMap[section]) {
+                            updateMap[section](results);
+                        }
+                        updateProgress(true);
+                    } else {
+                        // Previous data failure isn't critical, but we track it for progress
+                        // We might not want to turn red for missing previous data? 
+                        // User said "any API request fails", so let's stick to that.
+                        updateProgress(false);
+                    }
+                }).catch(e => {
+                    console.error(`Error loading prev metric ${metric}:`, e);
+                    updateProgress(false);
+                });
+            });
+        }
+
+        //1.有使用
+        function updateTrafficSection(results) {
+            const metrics = metricsConfig.traffic;
+            const series = [];
+            let timeData = [];
+
+            // Calculate global max
+            let globalMax = 0;
+            metrics.forEach(metric => {
+                const data = results[metric];
+                if (data && data.type === 'time') {
+                    const max = Math.max(...data.valueData);
+                    if (max > globalMax) globalMax = max;
+                }
+            });
+
+            const { unit, divisor } = getBestUnit(globalMax, 'bytes');
+
+            metrics.forEach(metric => {
+                const data = results[metric];
+                if (!data || data.type !== 'time') return;
+                
+                // Update KPI
+                document.getElementById(`kpi_${metric}`).innerText = formatBytes(data.sum);
+
+                // Growth
+                const prevData = results[metric + '_prev'];
+                if (prevData) {
+                    renderGrowth(`kpi_${metric}`, data.sum, prevData.sum);
+                }
+
+                if (timeData.length === 0) timeData = data.timeData;
+
+                // Chart Data (Dynamic Unit)
+                const valueData = data.valueData.map(v => (v / divisor).toFixed(2));
+                
+                series.push({
+                    name: metricLabels[metric],
+                    type: 'line',
+                    smooth: true,
+                    data: valueData,
+                    itemStyle: { color: metricColors[metric] },
+                    areaStyle: { opacity: 0.1 },
+                    // Store raw data for tooltip
+                    rawData: data.valueData
+                });
+            });
+
+            const option = {
+                tooltip: { trigger: 'axis', formatter: (params) => {
+                    let res = params[0].axisValue + '<br/>';
+                    params.forEach(param => {
+                        // Access raw data using dataIndex
+                        const seriesIndex = param.seriesIndex;
+                        const dataIndex = param.dataIndex;
+                        const rawVal = series[seriesIndex].rawData[dataIndex];
+                        const formattedVal = formatBytes(rawVal);
+                        
+                        res += `${param.marker}${param.seriesName}: ${formattedVal}<br/>`;
+                    });
+                    return res;
+                }},
+                legend: { data: metrics.map(m => metricLabels[m]), bottom: 0 },
+                grid: { left: '3%', right: '4%', bottom: '10%', top: '15%', containLabel: true },
+                xAxis: { type: 'category', boundaryGap: false, data: timeData },
+                yAxis: { type: 'value', name: unit },
+                series: series
+            };
+            chartTraffic.setOption(option);
+        }
+
+        //2.有使用
+        function updateBandwidthSection(results) {
+            const metrics = metricsConfig.bandwidth;
+            const series = [];
+            let timeData = [];
+
+            // Calculate global max
+            let globalMax = 0;
+            metrics.forEach(metric => {
+                const data = results[metric];
+                if (data && data.type === 'time') {
+                    const max = Math.max(...data.valueData);
+                    if (max > globalMax) globalMax = max;
+                }
+            });
+
+            const { unit, divisor } = getBestUnit(globalMax, 'bandwidth');
+
+            metrics.forEach(metric => {
+                const data = results[metric];
+                if (!data || data.type !== 'time') return;
+                
+                // Update KPI (Max/Peak)
+                document.getElementById(`kpi_${metric}`).innerText = formatBps(data.max);
+
+                // Growth
+                const prevData = results[metric + '_prev'];
+                if (prevData) {
+                    renderGrowth(`kpi_${metric}`, data.max, prevData.max);
+                }
+
+                if (timeData.length === 0) timeData = data.timeData;
+
+                // Chart Data (Dynamic Unit)
+                const valueData = data.valueData.map(v => (v / divisor).toFixed(2));
+                
+                series.push({
+                    name: metricLabels[metric],
+                    type: 'line',
+                    smooth: true,
+                    data: valueData,
+                    itemStyle: { color: metricColors[metric] },
+                    areaStyle: { opacity: 0.1 },
+                    // Store raw data
+                    rawData: data.valueData
+                });
+            });
+
+            const option = {
+                tooltip: { trigger: 'axis', formatter: (params) => {
+                    let res = params[0].axisValue + '<br/>';
+                    params.forEach(param => {
+                        const seriesIndex = param.seriesIndex;
+                        const dataIndex = param.dataIndex;
+                        const rawVal = series[seriesIndex].rawData[dataIndex];
+                        const formattedVal = formatBps(rawVal);
+                        res += `${param.marker}${param.seriesName}: ${formattedVal}<br/>`;
+                    });
+                    return res;
+                }},
+                legend: { data: metrics.map(m => metricLabels[m]), bottom: 0 },
+                grid: { left: '3%', right: '4%', bottom: '10%', top: '15%', containLabel: true },
+                xAxis: { type: 'category', boundaryGap: false, data: timeData },
+                yAxis: { type: 'value', name: unit },
+                series: series
+            };
+            chartBandwidth.setOption(option);
+        }
+
+        //4.有使用
+        function updateRequestsSection(results) {
+            const metrics = metricsConfig.requests;
+            const series = [];
+            let timeData = [];
+
+            // Calculate global max
+            let globalMax = 0;
+            metrics.forEach(metric => {
+                const data = results[metric];
+                if (data && data.type === 'time') {
+                    const max = Math.max(...data.valueData);
+                    if (max > globalMax) globalMax = max;
+                }
+            });
+
+            const { unit, divisor } = getBestCountUnit(globalMax);
+
+            metrics.forEach(metric => {
+                const data = results[metric];
+                if (!data || data.type !== 'time') return;
+                
+                // Update KPI
+                document.getElementById(`kpi_${metric}`).innerText = formatCount(data.sum);
+
+                // Growth
+                const prevData = results[metric + '_prev'];
+                if (prevData) {
+                    renderGrowth(`kpi_${metric}`, data.sum, prevData.sum);
+                }
+
+                if (timeData.length === 0) timeData = data.timeData;
+
+                // Chart Data (Dynamic Unit)
+                const valueData = data.valueData.map(v => {
+                    const val = v / divisor;
+                    return (divisor === 1) ? val : val.toFixed(2);
+                });
+
+                series.push({
+                    name: metricLabels[metric],
+                    type: 'line',
+                    smooth: true,
+                    data: valueData,
+                    itemStyle: { color: metricColors[metric] },
+                    areaStyle: { opacity: 0.2 },
+                    rawData: data.valueData
+                });
+            });
+
+            const option = {
+                tooltip: { trigger: 'axis', formatter: (params) => {
+                    let res = params[0].axisValue + '<br/>';
+                    params.forEach(param => {
+                        const seriesIndex = param.seriesIndex;
+                        const dataIndex = param.dataIndex;
+                        const rawVal = series[seriesIndex].rawData[dataIndex];
+                        const formattedVal = formatCount(rawVal);
+                        res += `${param.marker}${param.seriesName}: ${formattedVal}<br/>`;
+                    });
+                    return res;
+                }},
+                grid: { left: '3%', right: '4%', bottom: '15%', top: '15%', containLabel: true },
+                xAxis: { 
+                    type: 'category', 
+                    boundaryGap: false, 
+                    data: timeData,
+                    axisLabel: { fontSize: 10, rotate: 45 }
+                },
+                yAxis: { type: 'value', name: unit },
+                series: series
+            };
+            chartRequests.setOption(option);
+        }
+
+        //5.有使用
+        function updatePerformanceSection(results) {
+            const metrics = metricsConfig.performance;
+            const series = [];
+            let timeData = [];
+
+            metrics.forEach(metric => {
+                const data = results[metric];
+                if (!data || data.type !== 'time') return;
+                
+                // Update KPI (Avg)
+                document.getElementById(`kpi_${metric}`).innerText = data.avg.toFixed(2) + ' ms';
+
+                // Growth (Inverse=true for Latency)
+                const prevData = results[metric + '_prev'];
+                if (prevData) {
+                    renderGrowth(`kpi_${metric}`, data.avg, prevData.avg, true);
+                }
+
+                if (timeData.length === 0) timeData = data.timeData;
+
+                series.push({
+                    name: metricLabels[metric],
+                    type: 'line',
+                    smooth: true,
+                    data: data.valueData,
+                    itemStyle: { color: metricColors[metric] }
+                });
+            });
+
+            const option = {
+                tooltip: { trigger: 'axis', formatter: '{b}<br/>{a}: {c} ms' },
+                legend: { data: metrics.map(m => metricLabels[m]), bottom: 0 },
+                grid: { left: '3%', right: '4%', bottom: '15%', top: '15%', containLabel: true },
+                xAxis: { 
+                    type: 'category', 
+                    boundaryGap: false, 
+                    data: timeData,
+                    axisLabel: { fontSize: 10, rotate: 45 }
+                },
+                yAxis: { type: 'value', name: 'ms' },
+                series: series
+            };
+            chartPerformance.setOption(option);
+        }
+
+        //通用处理
+        const renderTopChart = (results, chartInstance, metricName, mapObject = null) => {
+            const data = results[metricName];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10);
+            
+            let unit = '';
+            let divisor = 1;
+            let label = metricLabels[metricName] || '';
+            
+            if (metricName.includes('outFlux')) {
+                const maxVal = sortedData.length > 0 ? sortedData[0].Value : 0;
+                const best = getBestUnit(maxVal, 'bytes');
+                unit = best.unit;
+                divisor = best.divisor;
+            } else {
+                const maxVal = sortedData.length > 0 ? sortedData[0].Value : 0;
+                const best = getBestCountUnit(maxVal);
+                unit = best.unit;
+                divisor = best.divisor;
+            }
+
+            const yAxisData = sortedData.map(item => mapObject?.[item.Key] || item.Key).reverse(); //问题点：没对“字段不存在”的短横杠做判断
+            const seriesData = sortedData.map(item => {
+                const val = item.Value / divisor;
+                return (divisor === 1) ? val : val.toFixed(2);
+            }).reverse();
+
+            let color = '#3b82f6';
+            const lowerName = metricName.toLowerCase();
+            if (lowerName.includes('country')) color = '#3b82f6';
+            else if (lowerName.includes('province') || lowerName.includes('resourcetype') || lowerName.includes('browser')) color = '#f59e0b';
+            else if (lowerName.includes('statuscode') || lowerName.includes('referer') || lowerName.endsWith('_ua')) color = '#8b5cf6';
+            else if (lowerName.includes('domain') || lowerName.includes('device')) color = '#06b6d4';
+            else if (lowerName.includes('url') || lowerName.includes('os')) color = '#10b981';
+            else if (lowerName.includes('sip')) color = '#ef4444';
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         let name = param.name;
+                         if (name.length > 100) name = name.substring(0, 100) + '...';
+                         
+                         const rawVal = sortedData[sortedData.length - 1 - param.dataIndex].Value;
+                         
+                         let formattedVal = '';
+                         if (metricName.includes('outFlux')) {
+                             formattedVal = formatBytes(rawVal);
+                         } else {
+                             const fVal = formatCount(rawVal);
+                             // Append '次' if not present in unit (formatCount returns unit, but we might want explicit '次')
+                             // formatCount returns "1.23 万". "1.23 万次" sounds good.
+                             // "500" -> "500 次".
+                             formattedVal = fVal + (fVal.includes('千') || fVal.includes('万') || fVal.includes('亿') ? '次' : ' 次');
+                         }
+                         
+                         return `${name}<br/>${param.marker}${label}: ${formattedVal}`;
+                    }
+                },
+                grid: { left: '3%', right: '25%', bottom: '8%', top: '8%', containLabel: true },
+                xAxis: { 
+                    type: 'value', 
+                    name: unit,
+                    nameLocation: 'end',
+                    nameTextStyle: { fontSize: 10 },
+                    axisLabel: { fontSize: 9 },
+                    splitLine: { show: true, lineStyle: { type: 'dashed' } }
+                },
+                yAxis: { 
+                    type: 'category', 
+                    data: yAxisData,
+                    axisLabel: {
+                        fontSize: 9,
+                        width: 70,
+                        overflow: 'truncate',
+                        ellipsis: '..'
+                    }
+                },
+                series: [
+                    {
+                        name: label,
+                        type: 'bar',
+                        data: seriesData,
+                        barMaxWidth: 16,
+                        itemStyle: { color: color, borderRadius: [0, 3, 3, 0] },
+                        label: { 
+                            show: true, 
+                            position: 'right',
+                            fontSize: 9,
+                            distance: 5
+                        }
+                    }
+                ]
+            };
+            chartInstance.setOption(option);
+        };
+
+        function updateTopMapChart(results) {
+            const metric = 'l7Flow_request_country';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Map data to ECharts format
+            // IMPORTANT: The 'name' here must match the region name AFTER nameMap is applied.
+            // Since worldNameMap maps English names to Chinese (e.g. "China" -> "中国大陆"),
+            // our data points must also use the Chinese names (e.g. "中国大陆") to match the map regions.
+            const mapData = data.data.map(item => {
+                const name = countryMap[item.Key] || codeToMapName[item.Key] || item.Key;
+                return {
+                    name: name,
+                    value: item.Value
+                };
+            });
+
+            const maxVal = mapData.length > 0 ? Math.max(...mapData.map(item => item.value)) : 0;
+
+            const option = {
+                tooltip: {
+                    trigger: 'item',
+                    formatter: function (params) {
+                        const val = params.value;
+                        return `${params.name}<br/>请求数: ${val ? val.toLocaleString() : 0} 次`;
+                    }
+                },
+                visualMap: {
+                    min: 0,
+                    max: maxVal,
+                    left: 'left',
+                    top: 'bottom',
+                    text: ['High', 'Low'],
+                    calculable: true,
+                    inRange: {
+                        color: ['#e0f2fe', '#0284c7']
+                    }
+                },
+                series: [
+                    {
+                        name: '请求数',
+                        type: 'map',
+                        mapType: 'world',
+                        roam: true,
+                        nameMap: worldNameMap,
+                        itemStyle: {
+                            emphasis: { label: { show: true } }
+                        },
+                        data: mapData
+                    }
+                ]
+            };
+
+            chartTopMap.setOption(option);
+        }
+
+        //6.有使用
+        function updateTopAnalysisSection(results) {
+            // 只保留域名流量、URL流量、URL请求数排行
+            renderTopChart(results, chartTopDomain, 'l7Flow_outFlux_domain');
+            renderTopChart(results, chartTopUrl, 'l7Flow_outFlux_url');
+            renderTopChart(results, chartTopRequestUrl, 'l7Flow_request_url');
+        }
+
+        // DEPRECATED - 以下代码不再使用，保留作为参考
+        function _DEPRECATED_updateTopAnalysisSection(results) {
+            updateTopMapChart(results);
+
+            // Flux Charts
+            renderTopChart(results, chartTopCountry, 'l7Flow_outFlux_country', countryMap);
+            renderTopChart(results, chartTopProvince, 'l7Flow_outFlux_province', provinceMap);
+            renderTopChart(results, chartTopStatusCode, 'l7Flow_outFlux_statusCode');
+            renderTopChart(results, chartTopDomain, 'l7Flow_outFlux_domain');
+            renderTopChart(results, chartTopUrl, 'l7Flow_outFlux_url');
+            renderTopChart(results, chartTopResourceType, 'l7Flow_outFlux_resourceType');
+            renderTopChart(results, chartTopSip, 'l7Flow_outFlux_sip');
+            //renderTopChart(results, chartTopReferer, 'l7Flow_outFlux_referers'); //以前方案
+            updateTopRefererChart(results); //降级处理，包含“字段不存在”处理
+            renderTopChart(results, chartTopUaDevice, 'l7Flow_outFlux_ua_device');
+            renderTopChart(results, chartTopUaBrowser, 'l7Flow_outFlux_ua_browser');
+            renderTopChart(results, chartTopUaOs, 'l7Flow_outFlux_ua_os');
+            renderTopChart(results, chartTopUa, 'l7Flow_outFlux_ua');
+
+            // Request Charts
+            renderTopChart(results, chartTopRequestCountry, 'l7Flow_request_country', countryMap);
+            renderTopChart(results, chartTopRequestProvince, 'l7Flow_request_province', provinceMap);
+            renderTopChart(results, chartTopRequestStatusCode, 'l7Flow_request_statusCode');
+            renderTopChart(results, chartTopRequestDomain, 'l7Flow_request_domain');
+            renderTopChart(results, chartTopRequestUrl, 'l7Flow_request_url');
+            renderTopChart(results, chartTopRequestResourceType, 'l7Flow_request_resourceType');
+            renderTopChart(results, chartTopRequestSip, 'l7Flow_request_sip');
+            //renderTopChart(results, chartTopRequestReferer, 'l7Flow_request_referers');
+            updateTopRequestRefererChart(results); //降级方案
+            renderTopChart(results, chartTopRequestUaDevice, 'l7Flow_request_ua_device');
+            renderTopChart(results, chartTopRequestUaBrowser, 'l7Flow_request_ua_browser');
+            renderTopChart(results, chartTopRequestUaOs, 'l7Flow_request_ua_os');
+            renderTopChart(results, chartTopRequestUa, 'l7Flow_request_ua');
+        }
+
+
+
+        /**  
+         *  下面这一堆我也不知道是干嘛的
+         *  可能是二叉脆脆遗留下的降级方案吧
+         *  先不删了，省的再出问题
+         *  不过倒是可以先留着也是，说不定后面可能会用到？
+         *  真的太神秘了
+         * **/
+
+        function updateTopCountryChart(results) {
+            const metric = 'l7Flow_outFlux_country';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => countryMap[item.Key] || item.Key).reverse(); // Countries
+            const seriesData = sortedData.map(item => (item.Value / (1024 * 1024 * 1024)).toFixed(2)).reverse(); // GB
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}流量: ${param.value} GB`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: 'GB' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '流量',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#3b82f6' },
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopCountry.setOption(option);
+        }
+
+        function updateTopProvinceChart(results) {
+            const metric = 'l7Flow_outFlux_province';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => provinceMap[item.Key] || item.Key).reverse(); // Map ID to Province Name
+            const seriesData = sortedData.map(item => (item.Value / (1024 * 1024 * 1024)).toFixed(2)).reverse(); // GB
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}流量: ${param.value} GB`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: 'GB' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '流量',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#f59e0b' }, // Amber
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopProvince.setOption(option);
+        }
+
+        function updateTopStatusCodeChart(results) {
+            const metric = 'l7Flow_outFlux_statusCode';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse(); // Status Codes
+            const seriesData = sortedData.map(item => (item.Value / (1024 * 1024 * 1024)).toFixed(2)).reverse(); // GB
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}流量: ${param.value} GB`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: 'GB' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '流量',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#8b5cf6' }, // Purple
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopStatusCode.setOption(option);
+        }
+
+        function updateTopDomainChart(results) {
+            const metric = 'l7Flow_outFlux_domain';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse(); // Domains
+            const seriesData = sortedData.map(item => (item.Value / (1024 * 1024 * 1024)).toFixed(2)).reverse(); // GB
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}流量: ${param.value} GB`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: 'GB' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '流量',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#06b6d4' }, // Cyan
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopDomain.setOption(option);
+        }
+
+        function updateTopUrlChart(results) {
+            const metric = 'l7Flow_outFlux_url';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse(); // URLs
+            const seriesData = sortedData.map(item => (item.Value / (1024 * 1024 * 1024)).toFixed(2)).reverse(); // GB
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         // Truncate long URLs in tooltip if needed, but usually full URL is better
+                         return `${param.name}<br/>${param.marker}流量: ${param.value} GB`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: 'GB' },
+                yAxis: { 
+                    type: 'category', 
+                    data: yAxisData,
+                    axisLabel: {
+                        formatter: function (value) {
+                            // Truncate long URLs in axis label
+                            if (value.length > 30) {
+                                return value.substring(0, 30) + '...';
+                            }
+                            return value;
+                        }
+                    }
+                },
+                series: [
+                    {
+                        name: '流量',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#10b981' }, // Green
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopUrl.setOption(option);
+        }
+
+        function updateTopResourceTypeChart(results) {
+            const metric = 'l7Flow_outFlux_resourceType';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse(); // Resource Types
+            const seriesData = sortedData.map(item => (item.Value / (1024 * 1024 * 1024)).toFixed(2)).reverse(); // GB
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}流量: ${param.value} GB`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: 'GB' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '流量',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#f59e0b' }, // Amber
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopResourceType.setOption(option);
+        }
+
+        function updateTopSipChart(results) {
+            const metric = 'l7Flow_outFlux_sip';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse(); // Client IPs
+            const seriesData = sortedData.map(item => (item.Value / (1024 * 1024 * 1024)).toFixed(2)).reverse(); // GB
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}流量: ${param.value} GB`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: 'GB' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '流量',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#ef4444' }, // Red
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopSip.setOption(option);
+        }
+
+        //无调用，作为备用方案来处理
+        function updateTopRefererChart(results) {
+            const metric = 'l7Flow_outFlux_referers';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => {
+                // Clean up key: remove backticks and trim
+                let key = item.Key.replace(/`/g, '').trim();
+                if (!key || key === '-') return '字段不存在'; //无/直接访问
+                return key;
+            }).reverse();
+            
+            const seriesData = sortedData.map(item => (item.Value / (1024 * 1024 * 1024)).toFixed(2)).reverse(); // GB
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}流量: ${param.value} GB`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: 'GB' },
+                yAxis: { 
+                    type: 'category', 
+                    data: yAxisData,
+                    axisLabel: {
+                        formatter: function (value) {
+                            // Truncate long URLs
+                            if (value.length > 30) {
+                                return value.substring(0, 30) + '...';
+                            }
+                            return value;
+                        }
+                    }
+                },
+                series: [
+                    {
+                        name: '流量',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#8b5cf6' }, // Purple
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopReferer.setOption(option);
+        }
+
+        function updateTopUaDeviceChart(results) {
+            const metric = 'l7Flow_outFlux_ua_device';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse();
+            const seriesData = sortedData.map(item => (item.Value / (1024 * 1024 * 1024)).toFixed(2)).reverse(); // GB
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}流量: ${param.value} GB`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: 'GB' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '流量',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#06b6d4' }, // Cyan
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopUaDevice.setOption(option);
+        }
+
+        function updateTopUaBrowserChart(results) {
+            const metric = 'l7Flow_outFlux_ua_browser';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse();
+            const seriesData = sortedData.map(item => (item.Value / (1024 * 1024 * 1024)).toFixed(2)).reverse(); // GB
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}流量: ${param.value} GB`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: 'GB' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '流量',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#f59e0b' }, // Amber
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopUaBrowser.setOption(option);
+        }
+
+        function updateTopUaOsChart(results) {
+            const metric = 'l7Flow_outFlux_ua_os';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse();
+            const seriesData = sortedData.map(item => (item.Value / (1024 * 1024 * 1024)).toFixed(2)).reverse(); // GB
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}流量: ${param.value} GB`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: 'GB' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '流量',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#10b981' }, // Green
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopUaOs.setOption(option);
+        }
+
+        function updateTopUaChart(results) {
+            const metric = 'l7Flow_outFlux_ua';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key.substring(0, 50) + (item.Key.length > 50 ? '...' : '')).reverse(); // Truncate long UAs
+            const seriesData = sortedData.map(item => (item.Value / (1024 * 1024 * 1024)).toFixed(2)).reverse(); // GB
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         // Find full UA string
+                         const originalItem = sortedData.find((item, index) => index === (sortedData.length - 1 - param.dataIndex));
+                         const fullName = originalItem ? originalItem.Key : param.name;
+                         return `${fullName}<br/>${param.marker}流量: ${param.value} GB`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: 'GB' },
+                yAxis: { type: 'category', data: yAxisData, axisLabel: { interval: 0, width: 200, overflow: 'truncate' } },
+                series: [
+                    {
+                        name: '流量',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#8b5cf6' }, // Purple
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopUa.setOption(option);
+        }
+
+        function updateTopRequestCountryChart(results) {
+            const metric = 'l7Flow_request_country';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => countryMap[item.Key] || item.Key).reverse();
+            const seriesData = sortedData.map(item => item.Value).reverse();
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}请求数: ${param.value.toLocaleString()} 次`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: '次' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '请求数',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#3b82f6' },
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopRequestCountry.setOption(option);
+        }
+
+        function updateTopRequestProvinceChart(results) {
+            const metric = 'l7Flow_request_province';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => provinceMap[item.Key] || item.Key).reverse();
+            const seriesData = sortedData.map(item => item.Value).reverse();
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}请求数: ${param.value.toLocaleString()} 次`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: '次' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '请求数',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#f59e0b' },
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopRequestProvince.setOption(option);
+        }
+
+        function updateTopRequestStatusCodeChart(results) {
+            const metric = 'l7Flow_request_statusCode';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse();
+            const seriesData = sortedData.map(item => item.Value).reverse();
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}请求数: ${param.value.toLocaleString()} 次`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: '次' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '请求数',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#8b5cf6' },
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopRequestStatusCode.setOption(option);
+        }
+
+        function updateTopRequestDomainChart(results) {
+            const metric = 'l7Flow_request_domain';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse();
+            const seriesData = sortedData.map(item => item.Value).reverse();
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}请求数: ${param.value.toLocaleString()} 次`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: '次' },
+                yAxis: { type: 'category', data: yAxisData, axisLabel: { interval: 0, width: 200, overflow: 'truncate' } },
+                series: [
+                    {
+                        name: '请求数',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#06b6d4' },
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopRequestDomain.setOption(option);
+        }
+
+        function updateTopRequestUrlChart(results) {
+            const metric = 'l7Flow_request_url';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse();
+            const seriesData = sortedData.map(item => item.Value).reverse();
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}请求数: ${param.value.toLocaleString()} 次`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: '次' },
+                yAxis: { type: 'category', data: yAxisData, axisLabel: { interval: 0, width: 200, overflow: 'truncate' } },
+                series: [
+                    {
+                        name: '请求数',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#10b981' },
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopRequestUrl.setOption(option);
+        }
+
+        function updateTopRequestResourceTypeChart(results) {
+            const metric = 'l7Flow_request_resourceType';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse();
+            const seriesData = sortedData.map(item => item.Value).reverse();
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}请求数: ${param.value.toLocaleString()} 次`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: '次' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '请求数',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#f59e0b' },
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopRequestResourceType.setOption(option);
+        }
+
+        function updateTopRequestSipChart(results) {
+            const metric = 'l7Flow_request_sip';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse();
+            const seriesData = sortedData.map(item => item.Value).reverse();
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}请求数: ${param.value.toLocaleString()} 次`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: '次' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '请求数',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#8b5cf6' },
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopRequestSip.setOption(option);
+        }
+
+        //无调用，作为备份使用
+        function updateTopRequestRefererChart(results) {
+            const metric = 'l7Flow_request_referers';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => {
+                 let key = item.Key;
+                 if (key === '-') return '字段不存在'; //直接访问
+                 // Clean up backticks and extra spaces
+                 key = key.replace(/`/g, '').trim();
+                 return key.substring(0, 50) + (key.length > 50 ? '...' : '');
+            }).reverse();
+            const seriesData = sortedData.map(item => item.Value).reverse();
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         // Find full referer string
+                         const originalItem = sortedData.find((item, index) => index === (sortedData.length - 1 - param.dataIndex));
+                         let fullName = param.name;
+                         if (originalItem) {
+                             let key = originalItem.Key;
+                             if (key === '-') fullName = '字段不存在'; //直接访问
+                             else fullName = key.replace(/`/g, '').trim();
+                         }
+                         return `${fullName}<br/>${param.marker}请求数: ${param.value.toLocaleString()} 次`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: '次' },
+                yAxis: { type: 'category', data: yAxisData, axisLabel: { interval: 0, width: 200, overflow: 'truncate' } },
+                series: [
+                    {
+                        name: '请求数',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#ec4899' },
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopRequestReferer.setOption(option);
+        }
+
+        function updateTopRequestUaDeviceChart(results) {
+            const metric = 'l7Flow_request_ua_device';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse();
+            const seriesData = sortedData.map(item => item.Value).reverse();
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}请求数: ${param.value.toLocaleString()} 次`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: '次' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '请求数',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#06b6d4' },
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopRequestUaDevice.setOption(option);
+        }
+
+        function updateTopRequestUaBrowserChart(results) {
+            const metric = 'l7Flow_request_ua_browser';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse();
+            const seriesData = sortedData.map(item => item.Value).reverse();
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}请求数: ${param.value.toLocaleString()} 次`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: '次' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '请求数',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#10b981' },
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopRequestUaBrowser.setOption(option);
+        }
+
+        function updateTopRequestUaOsChart(results) {
+            const metric = 'l7Flow_request_ua_os';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key).reverse();
+            const seriesData = sortedData.map(item => item.Value).reverse();
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         return `${param.name}<br/>${param.marker}请求数: ${param.value.toLocaleString()} 次`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: '次' },
+                yAxis: { type: 'category', data: yAxisData },
+                series: [
+                    {
+                        name: '请求数',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#f59e0b' },
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopRequestUaOs.setOption(option);
+        }
+
+        function updateTopRequestUaChart(results) {
+            const metric = 'l7Flow_request_ua';
+            const data = results[metric];
+
+            if (!data || data.type !== 'top' || !data.data) return;
+
+            // Sort by value (descending)
+            const sortedData = [...data.data].sort((a, b) => b.Value - a.Value).slice(0, 10); // Top 10
+
+            const yAxisData = sortedData.map(item => item.Key.substring(0, 50) + (item.Key.length > 50 ? '...' : '')).reverse(); // Truncate long UAs
+            const seriesData = sortedData.map(item => item.Value).reverse();
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                         const param = params[0];
+                         // Find full UA string
+                         const originalItem = sortedData.find((item, index) => index === (sortedData.length - 1 - param.dataIndex));
+                         const fullName = originalItem ? originalItem.Key : param.name;
+                         return `${fullName}<br/>${param.marker}请求数: ${param.value.toLocaleString()} 次`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'value', name: '次' },
+                yAxis: { type: 'category', data: yAxisData, axisLabel: { interval: 0, width: 200, overflow: 'truncate' } },
+                series: [
+                    {
+                        name: '请求数',
+                        type: 'bar',
+                        data: seriesData,
+                        itemStyle: { color: '#8b5cf6' },
+                        label: { show: true, position: 'right' }
+                    }
+                ]
+            };
+
+            chartTopRequestUa.setOption(option);
+        }
+        /** 神秘降级方案结束 **/
+
+        // Handle Resize
+        window.addEventListener('resize', () => {
+            chartTraffic && chartTraffic.resize();
+            chartBandwidth && chartBandwidth.resize();
+            chartRequests && chartRequests.resize();
+            chartPerformance && chartPerformance.resize();
+            chartOriginPull && chartOriginPull.resize();
+            chartTopCountry && chartTopCountry.resize();
+            chartTopProvince && chartTopProvince.resize();
+            chartTopStatusCode && chartTopStatusCode.resize();
+            chartTopDomain && chartTopDomain.resize();
+            chartTopUrl && chartTopUrl.resize();
+            chartTopRequestUrl && chartTopRequestUrl.resize();
+            chartTopResourceType && chartTopResourceType.resize();
+            chartTopSip && chartTopSip.resize();
+            chartTopReferer && chartTopReferer.resize();
+            chartTopUaDevice && chartTopUaDevice.resize();
+            chartTopUaBrowser && chartTopUaBrowser.resize();
+            chartTopUaOs && chartTopUaOs.resize();
+            chartTopUa && chartTopUa.resize();
+            chartTopRequestCountry && chartTopRequestCountry.resize();
+            chartTopRequestProvince && chartTopRequestProvince.resize();
+            chartTopRequestStatusCode && chartTopRequestStatusCode.resize();
+            chartTopRequestDomain && chartTopRequestDomain.resize();
+            chartTopRequestUrl && chartTopRequestUrl.resize();
+            chartTopRequestResourceType && chartTopRequestResourceType.resize();
+            chartTopRequestSip && chartTopRequestSip.resize();
+            chartTopRequestReferer && chartTopRequestReferer.resize();
+            chartTopRequestUaDevice && chartTopRequestUaDevice.resize();
+            chartTopRequestUaBrowser && chartTopRequestUaBrowser.resize();
+            chartTopRequestUaOs && chartTopRequestUaOs.resize();
+            chartTopRequestUa && chartTopRequestUa.resize();
+            chartTopMap && chartTopMap.resize();
+        });
+
+        // Start - Entrance
+        initDashboard();
+    </script>
+</body>
+</html>
