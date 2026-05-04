@@ -28,7 +28,7 @@
 4. 在 **环境变量 (Environment Variables)** 中添加以下配置：
    - `SECRET_ID`: 您的腾讯云 SecretId
    - `SECRET_KEY`: 您的腾讯云 SecretKey
-   - `SITE_NAME`: (可选) 自定义大屏标题，默认为 "EdgeOne 监控大屏"
+   - `SITE_NAME`: (可选) 自定义大屏标题，默认为 "新锐博客流量分析"
    - `SITE_ICON`: (可选) 自定义网页图标 URL
    - `ICP`: (可选) 备案号，如 "京ICP备12345678号"
 5. 部署项目。

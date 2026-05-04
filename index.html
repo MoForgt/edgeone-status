@@ -53,6 +53,17 @@
                     const favicon = document.querySelector('link[rel="icon"]');
                     if(favicon) favicon.href = config.siteIcon;
                 }
+                if(config.icp) {
+                    const icpEl = document.getElementById('icp-link');
+                    const icpSep = document.getElementById('icp-separator');
+                    if(icpEl) {
+                        icpEl.innerText = config.icp;
+                        icpEl.classList.remove('hidden');
+                    }
+                    if(icpSep) {
+                        icpSep.classList.remove('hidden');
+                    }
+                }
             } catch (err) {
                 console.error("Error fetching config:", err);
             }
@@ -462,8 +473,8 @@
         <!-- Footer -->
         <div class="flex flex-col justify-center items-center pt-10 pb-6 text-sm text-slate-500 space-y-3 border-t border-slate-200 mt-8">
             <div class="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 text-center">
-                <a href="https://beian.miit.gov.cn/" target="_blank" class="hover:text-blue-600 transition-colors">京ICP备12345678号</a>
-                <span class="hidden sm:inline">|</span>
+                <a id="icp-link" href="https://beian.miit.gov.cn/" target="_blank" class="hover:text-blue-600 transition-colors hidden">京ICP备12345678号</a>
+                <span id="icp-separator" class="hidden sm:inline hidden">|</span>
                 <span>本项目基于 <a href="https://github.com/afoim/eo_monitior" target="_blank" class="font-medium text-slate-700 hover:text-blue-600 transition-colors">AcoFork/eo_monitor</a> 二次开发</span>
             </div>
         </div>
