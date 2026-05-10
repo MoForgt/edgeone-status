@@ -440,6 +440,8 @@ app.get('/traffic', async (req, res) => {
         const interval = req.query.interval;
         const zoneId = req.query.zoneId;
         const zoneIds = zoneId ? [ zoneId ] : [ "*" ];
+        const host = req.query.host;
+        const hosts = host && host !== '*' ? [ host ] : null;
 
         let params = {};
         let data;
@@ -454,10 +456,21 @@ app.get('/traffic', async (req, res) => {
                 "MetricName": metric,
                 "ZoneIds": zoneIds
             };
+            // 使用 Filters 参数过滤域名，参考 get.php
+            if (hosts) {
+                params["Filters"] = [
+                    {
+                        "Key": "domain",
+                        "Operator": "equals",
+                        "Value": hosts
+                    }
+                ];
+            }
             console.log("Calling DescribeTopL7AnalysisData with params:", JSON.stringify(params, null, 2));
             data = await client.DescribeTopL7AnalysisData(params);
         } else if (SECURITY_METRICS.includes(metric)) {
             // API: DescribeWebProtectionData (DDoS) using CommonClient
+            // 注意：DescribeWebProtectionData 不支持按域名过滤，只能按 Zone 过滤
             params = {
                 "StartTime": startTime,
                 "EndTime": endTime,
@@ -509,6 +522,17 @@ app.get('/traffic', async (req, res) => {
             if (interval && interval !== 'auto') {
                 params["Interval"] = interval;
             }
+            
+            // 使用 Filters 参数过滤域名，参考 get.php
+            if (hosts) {
+                params["Filters"] = [
+                    {
+                        "Key": "domain",
+                        "Operator": "equals",
+                        "Value": hosts
+                    }
+                ];
+            }
 
             console.log("Calling DescribeTimingFunctionAnalysisData with params:", JSON.stringify(params, null, 2));
             
@@ -536,6 +560,7 @@ app.get('/traffic', async (req, res) => {
 
         } else {
             // API: DescribeTimingL7AnalysisData OR DescribeTimingL7OriginPullData
+            // 参考 get.php，使用 Filters 参数过滤域名
             params = {
                 "StartTime": startTime,
                 "EndTime": endTime,
@@ -545,6 +570,17 @@ app.get('/traffic', async (req, res) => {
 
             if (interval && interval !== 'auto') {
                 params["Interval"] = interval;
+            }
+            
+            // 使用 Filters 参数过滤域名，参考 get.php
+            if (hosts) {
+                params["Filters"] = [
+                    {
+                        "Key": "domain",
+                        "Operator": "equals",
+                        "Value": hosts
+                    }
+                ];
             }
             
             console.log("Calling Timing API with params:", JSON.stringify(params, null, 2));
@@ -560,6 +596,93 @@ app.get('/traffic', async (req, res) => {
     } catch (err) {
         console.error("Error calling Tencent Cloud API:", err);
         res.status(500).json({ error: err.message });
+    }
+});
+
+// 获取子域名列表 - 使用DescribeTopL7AnalysisData获取域名列表
+app.get('/hosts', async (req, res) => {
+    try {
+        const { secretId, secretKey } = getKeys();
+        
+        if (!secretId || !secretKey) {
+            return res.status(500).json({ error: "Missing credentials" });
+        }
+
+        const zoneId = req.query.zoneId;
+        if (!zoneId || zoneId === '*') {
+            return res.json({ Hosts: [] });
+        }
+
+        // 使用 CommonClient 调用 DescribeTopL7AnalysisData 获取域名列表
+        const commonClientConfig = {
+            credential: {
+                secretId: secretId,
+                secretKey: secretKey,
+            },
+            region: "ap-guangzhou",
+            profile: {
+                httpProfile: {
+                    endpoint: "teo.tencentcloudapi.com",
+                },
+            },
+        };
+
+        const commonClient = new CommonClient(
+            "teo.tencentcloudapi.com",
+            "2022-09-01",
+            commonClientConfig
+        );
+
+        // 获取最近7天的数据，按域名分组
+        const now = new Date();
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const formatDate = (date) => date.toISOString().slice(0, 19) + 'Z';
+
+        const params = {
+            "StartTime": formatDate(sevenDaysAgo),
+            "EndTime": formatDate(now),
+            "MetricName": "l7Flow_outFlux_domain",
+            "ZoneIds": [zoneId],
+            "Limit": 1000
+        };
+        
+        console.log("Calling DescribeTopL7AnalysisData for zone:", zoneId);
+        const data = await commonClient.request("DescribeTopL7AnalysisData", params);
+        
+        console.log("API Response keys:", Object.keys(data));
+        console.log("API Response:", JSON.stringify(data, null, 2));
+        
+        // 从返回数据中提取域名列表 - DescribeTopL7AnalysisData 返回结构是 Data[0].DetailData
+        let hosts = [];
+        
+        // 数据结构: { Data: [{ DetailData: [{ Key: "domain", Value: ... }] }] }
+        const topData = data.Data || data.Response?.Data;
+        if (Array.isArray(topData) && topData.length > 0) {
+            const detailData = topData[0].DetailData || topData[0].Data;
+            if (Array.isArray(detailData)) {
+                hosts = detailData.map(item => ({
+                    Host: item.Key || item.Domain || item.Host || ''
+                })).filter(h => h.Host);
+            }
+        }
+        
+        // 去重
+        const uniqueHosts = [];
+        const seen = new Set();
+        for (const host of hosts) {
+            if (!seen.has(host.Host)) {
+                seen.add(host.Host);
+                uniqueHosts.push(host);
+            }
+        }
+        
+        const response = { Hosts: uniqueHosts };
+        console.log("Response to client:", JSON.stringify(response));
+        res.json(response);
+    } catch (err) {
+        console.error("Error calling DescribeTopL7AnalysisData:", err);
+        console.error("Error details:", JSON.stringify(err, null, 2));
+        res.status(500).json({ error: err.message || String(err) });
     }
 });
 

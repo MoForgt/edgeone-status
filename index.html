@@ -166,6 +166,7 @@ body{font-family:"HarmonyOS Sans SC" !important}
                     <div class="flex gap-2">
                         <button onclick="setTimeRange('1h')" class="time-range-btn h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm font-medium hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" data-value="1h">1小时</button>
                         <button onclick="setTimeRange('today')" class="time-range-btn h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm font-medium hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" data-value="today">当天</button>
+                        <button onclick="setTimeRange('yesterday')" class="time-range-btn h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm font-medium hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" data-value="yesterday">昨天</button>
                         <button onclick="setTimeRange('7d')" class="time-range-btn h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm font-medium hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" data-value="7d">七天</button>
                         <button onclick="setTimeRange('31d')" class="time-range-btn h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm font-medium hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" data-value="31d">31天</button>
                     </div>
@@ -173,8 +174,14 @@ body{font-family:"HarmonyOS Sans SC" !important}
                 </div>
                 <div class="flex flex-col gap-1.5">
                     <label for="zoneId" class="text-xs font-medium text-slate-500 uppercase tracking-wider">选择站点</label>
-                    <select id="zoneId" onchange="refreshData()" class="h-9 w-[180px] rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
+                    <select id="zoneId" onchange="onZoneChange()" class="h-9 w-[140px] rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
                          <option value="*">加载中...</option>
+                    </select>
+                </div>
+                <div class="flex flex-col gap-1.5">
+                    <label for="hostId" class="text-xs font-medium text-slate-500 uppercase tracking-wider">选择域名</label>
+                    <select id="hostId" onchange="refreshData()" class="h-9 w-[140px] rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
+                         <option value="*">全部域名</option>
                     </select>
                 </div>
             </div>
@@ -757,11 +764,11 @@ body{font-family:"HarmonyOS Sans SC" !important}
             // 更新按钮样式
             document.querySelectorAll('.time-range-btn').forEach(btn => {
                 if (btn.dataset.value === range) {
-                    btn.classList.remove('bg-white', 'border-slate-200');
-                    btn.classList.add('bg-blue-500', 'border-blue-500', 'text-white');
+                    btn.classList.remove('bg-white', 'border-slate-200', 'hover:bg-slate-50');
+                    btn.classList.add('bg-blue-500', 'border-blue-500', 'text-white', 'hover:bg-blue-600');
                 } else {
-                    btn.classList.remove('bg-blue-500', 'border-blue-500', 'text-white');
-                    btn.classList.add('bg-white', 'border-slate-200');
+                    btn.classList.remove('bg-blue-500', 'border-blue-500', 'text-white', 'hover:bg-blue-600');
+                    btn.classList.add('bg-white', 'border-slate-200', 'hover:bg-slate-50');
                 }
             });
             
@@ -781,6 +788,14 @@ body{font-family:"HarmonyOS Sans SC" !important}
                 case 'today': 
                     startTime = new Date(now);
                     startTime.setHours(0, 0, 0, 0);
+                    break;
+                case 'yesterday':
+                    startTime = new Date(now);
+                    startTime.setDate(startTime.getDate() - 1);
+                    startTime.setHours(0, 0, 0, 0);
+                    endTime = new Date(now);
+                    endTime.setDate(endTime.getDate() - 1);
+                    endTime.setHours(23, 59, 59, 999);
                     break;
                 case '7d': startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
                 case '31d': startTime = new Date(now.getTime() - 31 * 24 * 60 * 60 * 1000); break;
@@ -857,11 +872,15 @@ body{font-family:"HarmonyOS Sans SC" !important}
                 }
 
                 const zoneId = document.getElementById('zoneId').value.trim();
+                const hostId = document.getElementById('hostId').value.trim();
                 
                 let url = `/api/traffic?metric=${metric}&startTime=${encodeURIComponent(startTime)}&endTime=${encodeURIComponent(endTime)}`;
                 // 粒度始终自动，不添加 interval 参数
                 if (zoneId) {
                     url += `&zoneId=${encodeURIComponent(zoneId)}`;
+                }
+                if (hostId && hostId !== '*') {
+                    url += `&host=${encodeURIComponent(hostId)}`;
                 }
 
                 const response = await fetch(url);
@@ -1045,6 +1064,9 @@ body{font-family:"HarmonyOS Sans SC" !important}
                 } else {
                     select.value = "*";
                 }
+                
+                // Load hosts for selected zone
+                await fetchHosts(select.value);
 
             } catch (err) {
                 console.error("Error fetching zones:", err);
@@ -1053,6 +1075,72 @@ body{font-family:"HarmonyOS Sans SC" !important}
                 if (select.options.length === 0 || select.options[0].value !== '*') {
                      select.innerHTML = '<option value="*">获取站点失败 (默认为全部)</option>';
                 }
+            }
+        }
+
+        async function onZoneChange() {
+            const zoneId = document.getElementById('zoneId').value;
+            await fetchHosts(zoneId);
+            await refreshData();
+        }
+
+        async function fetchHosts(zoneId) {
+            try {
+                const select = document.getElementById('hostId');
+                
+                if (!zoneId || zoneId === '*') {
+                    select.innerHTML = '<option value="*">全部域名</option>';
+                    select.disabled = true;
+                    return;
+                }
+                
+                select.disabled = true;
+                select.innerHTML = '<option value="*">加载中...</option>';
+                
+                const response = await fetch(`/api/hosts?zoneId=${encodeURIComponent(zoneId)}`);
+                const result = await response.json();
+                
+                const currentVal = select.value;
+                select.innerHTML = '';
+                
+                // Always add "All Hosts" option
+                const allOption = document.createElement('option');
+                allOption.value = "*";
+                allOption.text = "全部域名";
+                select.appendChild(allOption);
+                
+                // 要屏蔽的域名列表（EdgeOne Pages 默认域名等）
+                const blockedDomains = ['.edgeone.'];
+                
+                if (result.Hosts && result.Hosts.length > 0) {
+                    // 过滤掉屏蔽的域名
+                    const filteredHosts = result.Hosts.filter(host => {
+                        return !blockedDomains.some(blocked => host.Host.includes(blocked));
+                    });
+                    
+                    filteredHosts.forEach(host => {
+                        const option = document.createElement('option');
+                        option.value = host.Host;
+                        option.text = host.Host;
+                        select.appendChild(option);
+                    });
+                    select.disabled = false;
+                } else {
+                    select.innerHTML = '<option value="*">暂无子域名</option>';
+                    select.disabled = true;
+                }
+                
+                // Restore selection if it exists
+                if (currentVal && Array.from(select.options).some(o => o.value === currentVal)) {
+                    select.value = currentVal;
+                } else {
+                    select.value = "*";
+                }
+            } catch (err) {
+                console.error("Error fetching hosts:", err);
+                const select = document.getElementById('hostId');
+                select.innerHTML = '<option value="*">获取域名失败</option>';
+                select.disabled = true;
             }
         }
 
