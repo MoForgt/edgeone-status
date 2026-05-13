@@ -599,6 +599,42 @@ app.get('/traffic', async (req, res) => {
     }
 });
 
+// 获取黑名单列表
+function getBlackList() {
+    const blackListEnv = process.env.BLACK_LIST;
+    if (!blackListEnv) {
+        return [];
+    }
+    try {
+        const parsed = JSON.parse(blackListEnv);
+        if (Array.isArray(parsed)) {
+            return parsed;
+        }
+    } catch (e) {
+        // 如果不是有效的 JSON 数组，尝试按逗号分隔
+        return blackListEnv.split(',').map(s => s.trim()).filter(s => s);
+    }
+    return [];
+}
+
+// 检查域名是否在黑名单中
+function isBlackListed(host, blackList) {
+    if (!blackList || blackList.length === 0) {
+        return false;
+    }
+    return blackList.some(blackDomain => {
+        // 精确匹配
+        if (host === blackDomain) {
+            return true;
+        }
+        // 子域名匹配：如果黑名单是 xrbk.cn，则 icpc.xrbk.cn 也会被屏蔽
+        if (host.endsWith('.' + blackDomain)) {
+            return true;
+        }
+        return false;
+    });
+}
+
 // 获取子域名列表 - 使用DescribeTopL7AnalysisData获取域名列表
 app.get('/hosts', async (req, res) => {
     try {
@@ -666,11 +702,15 @@ app.get('/hosts', async (req, res) => {
             }
         }
         
-        // 去重
+        // 获取黑名单
+        const blackList = getBlackList();
+        console.log("Black list:", blackList);
+        
+        // 去重并过滤黑名单
         const uniqueHosts = [];
         const seen = new Set();
         for (const host of hosts) {
-            if (!seen.has(host.Host)) {
+            if (!seen.has(host.Host) && !isBlackListed(host.Host, blackList)) {
                 seen.add(host.Host);
                 uniqueHosts.push(host);
             }
